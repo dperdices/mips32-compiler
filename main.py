@@ -41,7 +41,7 @@ def obj2data(objname, dataname):
 def obj2text(objname, dataname):
     command = ["mips-linux-gnu-objdump"]
     command += ["--full-contents",  objname]
-    command += ["-j", ".text"]
+    command += ["-j", ".text", "-O0"]
     proc = subprocess.run(command, capture_output=True)
     
     if proc.returncode != 0:
@@ -94,7 +94,7 @@ def api_compile():
     code = request.form["code"]
     random_file = f"/tmp/{get_random_filename()}.o"
     command = ["mips-linux-gnu-as"] 
-    command += ["-g2", "-mips32", "-o", random_file]
+    command += ["-g2", "-O0", "-mips32", "-o", random_file]
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = proc.communicate(input=bytes(code, encoding="utf8"))
     
