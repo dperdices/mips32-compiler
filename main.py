@@ -50,7 +50,7 @@ def obj2text(objname, dataname):
     with open(dataname, "w") as f:
         f.write("\n".join(lines))
 
-def obj2commented(objname, commentedversion):
+def obj2commented(objname, commentedversion=None):
     command = ["mips-linux-gnu-objdump"]
     command += ["-S",  objname]
     command += ["-j", ".text", "--source-comment=##  "]
@@ -58,9 +58,11 @@ def obj2commented(objname, commentedversion):
     
     if proc.returncode != 0:
         raise CompileError(str(proc.stderr, encoding="utf8"))
-    with open(commentedversion, "wb") as f:
-        f.write(proc.stdout)
-
+    if commentedversion:
+        with open(commentedversion, "wb") as f:
+            f.write(proc.stdout)
+    else:
+        return str(proc.stdout, encoding="utf8")
 
 def parse_full_contents(text):
     res = []
@@ -91,49 +93,63 @@ def favicon():
 
 @app.route("/api/compile", methods=["POST"])
 def api_compile():
-    code = request.form["code"]
-    random_file = f"/tmp/{get_random_filename()}.o"
-    command = ["mips-linux-gnu-as"] 
-    command += ["-g2", "-O0", "-mips32", "-o", random_file]
-    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate(input=bytes(code, encoding="utf8"))
-    
-    if proc.returncode != 0:
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        code = request.form["code"]
+        sourcefile = f"{tmpdirname}/program.asm"
+        with open(sourcefile, "w") as f:
+            f.write(code)
+        objfile = f"{tmpdirname}/program.o"
+        
+        try:
+            asm2obj(sourcefile, objfile)
+        except Exception as e:
+            return {
+                "error": str(e)
+            }
+
+        command = ["mips-linux-gnu-objdump"]
+        command += ["--full-contents",  objfile]
+        command += ["-j", ".data", "-d"]
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        if proc.returncode != 0:
+            return {
+                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
+            }
+
+        proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate(input=stdout)
+        data = str(stdout, encoding="utf8")
+
+        command = ["mips-linux-gnu-objdump"]
+        command += ["--full-contents",  objfile]
+        command += ["-j", ".text", "-d"]
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        if proc.returncode != 0:
+            return {
+                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
+            }
+
+        proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate(input=stdout)
+        text = str(stdout, encoding="utf8")
+
+        command = ["mips-linux-gnu-objdump"]
+        command += ["-S",  objfile, "--source-comment=##  "]
+        command += ["-j", ".text"]
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        if proc.returncode != 0:
+            return {
+                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
+            }
+        text_with_source = str(stdout, encoding="utf8")
         return {
-            "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
+            "data": data,
+            "text": text,
+            "text_with_source": text_with_source
         }
-    command = ["mips-linux-gnu-objdump"]
-    command += ["--full-contents",  random_file]
-    command += ["-j", ".data", "-d"]
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    if proc.returncode != 0:
-        return {
-            "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
-        }
-
-    proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdout, stderr = proc.communicate(input=stdout)
-    data = str(stdout, encoding="utf8")
-
-    command = ["mips-linux-gnu-objdump"]
-    command += ["--full-contents",  random_file]
-    command += ["-j", ".text", "-d"]
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    if proc.returncode != 0:
-        return {
-            "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
-        }
-
-    proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdout, stderr = proc.communicate(input=stdout)
-    text = str(stdout, encoding="utf8")
-
-    return {
-        "data": data,
-        "text": text
-    }
 
 @app.route('/api/compile_zip', methods=["POST"])
 def api_compile_zip():

@@ -232,7 +232,12 @@
       </div>
       <div id="text_res">
         <div class="editor-title">
-          <p> Text segment </p>
+          <p> Text segment 
+            <input type="radio" id="simple_mode" name="text_type" value="simple" checked onchange="update_text()">
+            <label for="simple">Simple</label>
+            <input type="radio" id="with_source_mode" name="text_type" value="with_source" onchange="update_text()">
+            <label for="with_source">With Source intermixed (only debug)</label>
+          </p>
         </div>
         <div id="text_res_editor"></div>
       </div>
@@ -299,7 +304,16 @@
       downloadContents("datos", editor_data_res.getValue())
       downloadContents("instrucciones", editor_text_res.getValue())
     }
+
+    function update_text() {
+      if (document.getElementById("simple_mode").checked)
+          editor_text_res.setValue(text)
+        else
+          editor_text_res.setValue(text_with_source)
+    }
     document.getElementById("download_button").disabled = true
+    var text = ""
+    var text_with_source = ""
     function sendCompile() {
       code = editor.getValue()
       console.log(code)
@@ -307,12 +321,19 @@
         if ("error" in data) {
           editor_data_res.setValue("")
           editor_text_res.setValue("")
+          text = ""
+          text_with_source = ""
           showError(data["error"])
           document.getElementById("download_button").disabled = true
           return;
         }
         editor_data_res.setValue(data["data"])
-        editor_text_res.setValue(data["text"])
+        if (document.getElementById("simple_mode").checked)
+          editor_text_res.setValue(data["text"])
+        else
+          editor_text_res.setValue(data["text_with_source"])
+        text = data["text"]
+        text_with_source = data["text_with_source"]
         if (data["data"].length > 0 || data["text"].length > 0)
           document.getElementById("download_button").disabled = false
       })
