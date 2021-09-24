@@ -25,7 +25,7 @@ def asm2obj(filename, objname):
     if proc.returncode != 0:
         raise CompileError(str(proc.stderr, encoding="utf8"))
 
-def obj2data(objname, dataname):
+def obj2data(objname, dataname=None):
     command = ["mips-linux-gnu-objdump"]
     command += ["--full-contents",  objname]
     command += ["-j", ".data"]
@@ -35,20 +35,26 @@ def obj2data(objname, dataname):
         raise CompileError(str(proc.stderr, encoding="utf8"))
     
     lines = parse_full_contents(str(proc.stdout, encoding="utf8"))
-    with open(dataname, "w") as f:
-        f.write("\n".join(lines))
+    if dataname:
+        with open(dataname, "w") as f:
+            f.write("\n".join(lines))
+    else:
+        return "\n".join(lines)
 
-def obj2text(objname, dataname):
+def obj2text(objname, dataname=None):
     command = ["mips-linux-gnu-objdump"]
     command += ["--full-contents",  objname]
-    command += ["-j", ".text", "-O0"]
+    command += ["-j", ".text"]
     proc = subprocess.run(command, capture_output=True)
     
     if proc.returncode != 0:
         raise CompileError(str(proc.stderr, encoding="utf8"))
     lines = parse_full_contents(str(proc.stdout, encoding="utf8"))
-    with open(dataname, "w") as f:
-        f.write("\n".join(lines))
+    if dataname:
+        with open(dataname, "w") as f:
+            f.write("\n".join(lines))
+    else:
+        return "\n".join(lines)
 
 def obj2commented(objname, commentedversion=None):
     command = ["mips-linux-gnu-objdump"]
@@ -76,7 +82,7 @@ def parse_full_contents(text):
             pieces = line.split(" ")
             address = int(pieces[0], base=16)
             for i in range(4):
-                res.append("%08x %s" % ((address+i*4, pieces[i+1])))
+                res.append("%08x\t%s" % ((address+i*4, pieces[i+1])))
     return res
 
 @app.route('/static/<path:path>')
@@ -102,49 +108,14 @@ def api_compile():
 
         try:
             asm2obj(sourcefile, objfile)
+            data = obj2data(objfile)
+            text = obj2text(objfile)
+            text_with_source = obj2commented(objfile)
         except Exception as e:
             return {
                 "error": str(e)
             }
 
-        command = ["mips-linux-gnu-objdump"]
-        command += ["--full-contents",  objfile]
-        command += ["-j", ".data", "-d"]
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            return {
-                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
-            }
-
-        proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate(input=stdout)
-        data = str(stdout, encoding="utf8")
-
-        command = ["mips-linux-gnu-objdump"]
-        command += ["--full-contents",  objfile]
-        command += ["-j", ".text", "-d"]
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            return {
-                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
-            }
-
-        proc = subprocess.Popen(["python3", "parser.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate(input=stdout)
-        text = str(stdout, encoding="utf8")
-
-        command = ["mips-linux-gnu-objdump"]
-        command += ["-S",  objfile, "--source-comment=##  "]
-        command += ["-j", ".text"]
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            return {
-                "error": str(stdout, encoding="utf8") + str(stderr, encoding="utf8")
-            }
-        text_with_source = str(stdout, encoding="utf8")
         return {
             "data": data,
             "text": text,
