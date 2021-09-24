@@ -20,7 +20,7 @@ app = Flask(__name__)
 
 def asm2obj(filename, objname):
     command = ["mips-linux-gnu-as"] 
-    command += ["-g2", "-g", "--gdwarf2", "-mips32", "-o", objname, filename]
+    command += ["-g2", "-g", "--gdwarf2", "-mips32", "-O0", "-o", objname, filename]
     proc = subprocess.run(command, capture_output=True)
     if proc.returncode != 0:
         raise CompileError(str(proc.stderr, encoding="utf8"))
@@ -99,7 +99,7 @@ def api_compile():
         with open(sourcefile, "w") as f:
             f.write(code)
         objfile = f"{tmpdirname}/program.o"
-        
+
         try:
             asm2obj(sourcefile, objfile)
         except Exception as e:
